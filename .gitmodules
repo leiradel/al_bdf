@@ -1,0 +1,3 @@
+[submodule "render/stb"]
+	path = render/stb
+	url = https://github.com/nothings/stb.git
