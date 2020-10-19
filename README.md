@@ -22,6 +22,9 @@ configuration used in the implementation must be used.
     1. `int x`: The horizontal coordinate of the pixel to render (0 is left)
     1. `int y`: The vertical coordinate of the pixel to render (0 is top)
     1. `AL_BDF_COLOR_TYPE color`: The color to set the pixel
+    1. `size_t pitch`: An arbitrary value passed to `al_bdf_render`, can be
+      used to pass the number of pixels or bytes that makes up an entire
+      horizontal line in the canvas.
 * `AL_BDF_PUT_PIXELS`: A macro to be used instead of `AL_BDF_PUT_PIXEL`. This
   one will receive a bit pattern for eight horizontal pixels to be drawn
   starting at `x` and `y`. It takes the same parameters, plus `uint8_t pattern` with each bit set corresponding to a pixel that must be rendered, from most

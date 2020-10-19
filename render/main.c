@@ -4,18 +4,12 @@
 #include <string.h>
 #include <errno.h>
 
-typedef struct {
-    uint16_t* const pixels;
-    size_t const width;
-}
-ud_t;
-
-static void put_pixel(ud_t* const userdata, int const x, int const y, uint16_t color);
+static void put_pixel(uint16_t* const canvas, int const x, int const y, uint16_t const color, size_t const pitch);
 
 /*---------------------------------------------------------------------------*/
 /* al_sfxr config and inclusion */
 #define AL_BDF_IMPLEMENTATION
-#define AL_BDF_CANVAS_TYPE ud_t*
+#define AL_BDF_CANVAS_TYPE uint16_t*
 #define AL_BDF_COLOR_TYPE uint16_t
 #define AL_BDF_PUT_PIXEL put_pixel
 #include <al_bdf.h>
@@ -52,8 +46,8 @@ static int load_font(char const* const filename, al_bdf_Font* const font) {
     return res;
 }
 
-static void put_pixel(ud_t* const userdata, int const x, int const y, uint16_t color) {
-    userdata->pixels[y * userdata->width + x] = color;
+static void put_pixel(uint16_t* const canvas, int const x, int const y, uint16_t const color, size_t const pitch) {
+    canvas[y * pitch / 2 + x] = color;
 }
 
 int main(int argc, char** argv) {
@@ -72,27 +66,26 @@ int main(int argc, char** argv) {
     al_bdf_size(&font, &x0, &y0, &width, &height, argv[2]);
 
     size_t const count = width * height;
-    uint16_t* const pixels = (uint16_t*)malloc(count * 2);
+    uint16_t* const canvas = (uint16_t*)malloc(count * 2);
 
-    if (pixels == NULL) {
+    if (canvas == NULL) {
         fprintf(stderr, "Out of memory\n");
         al_bdf_unload(&font);
         return EXIT_FAILURE;
     }
 
-    memset(pixels, 0, count * 2);
+    memset(canvas, 0, count * 2);
 
-    ud_t ud = {pixels, width};
-    al_bdf_render(&font, argv[2], &ud, 0xff00);
+    al_bdf_render(&font, argv[2], canvas, 0xff00, width * 2);
                   
-    if (stbi_write_png("render.png", width, height, 2, pixels, width * 2) == 0) {
+    if (stbi_write_png("render.png", width, height, 2, canvas, width * 2) == 0) {
         fprintf(stderr, "Error writing image\n");
-        free(pixels);
+        free(canvas);
         al_bdf_unload(&font);
         return EXIT_FAILURE;
     }
 
-    free(pixels);
+    free(canvas);
     al_bdf_unload(&font);
     return EXIT_SUCCESS;
 }
