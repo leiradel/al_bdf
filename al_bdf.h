@@ -176,6 +176,16 @@ void al_bdf_render(al_bdf_Font* const font, char const* text, AL_BDF_CANVAS_TYPE
 #include <setjmp.h>
 #include <stdlib.h>
 
+#if defined(AL_BDF_MALLOC) && defined(AL_BDF_REALLOC) && defined(AL_BDF_FREE)
+/* Ok */
+#elif !defined(AL_BDF_MALLOC) && !defined(AL_BDF_REALLOC) && !defined(AL_BDF_FREE)
+#define AL_BDF_MALLOC malloc
+#define AL_BDF_REALLOC realloc
+#define AL_BDF_FREE free
+#else
+#error "Must define all or none of AL_BDF_MALLOC, AL_BDF_REALLOC, and AL_BDF_FREE."
+#endif
+
 /*
 "Lines may be of unlimited length."
 
@@ -635,9 +645,9 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
             }
 
             case AL_BDF_CHARS: {
-                /* Read the number of chars in this font and malloc the required memory. */
+                /* Read the number of chars in this font and allocate the required memory. */
                 font->num_chars = al_bdf_read_int(&ctx);
-                font->chars = chars = (al_bdf_Char*)calloc(font->num_chars, sizeof(al_bdf_Char));
+                font->chars = chars = (al_bdf_Char*)AL_BDF_MALLOC(font->num_chars * sizeof(al_bdf_Char));
 
                 if (chars == NULL) {
                     longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
@@ -738,7 +748,7 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                     current_char->wbytes = (current_char->bbw + 7) / 8;
 
                     /* Malloc the memory for the pixels. */
-                    uint8_t* bits = (uint8_t*)malloc(current_char->wbytes * current_char->bbh);
+                    uint8_t* bits = (uint8_t*)AL_BDF_MALLOC(current_char->wbytes * current_char->bbh);
                     current_char->bits = bits;
 
                     if (bits == NULL) {
@@ -783,7 +793,7 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
 
                 if (num_chars < font->num_chars) {
                     font->num_chars = num_chars;
-                    al_bdf_Char* const new_chars = (al_bdf_Char*)realloc(chars, num_chars * sizeof(al_bdf_Char));
+                    al_bdf_Char* const new_chars = (al_bdf_Char*)AL_BDF_REALLOC(chars, num_chars * sizeof(al_bdf_Char));
 
                     if (new_chars != NULL) {
                         font->chars = chars = new_chars;
@@ -805,10 +815,10 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
 
 void al_bdf_unload(al_bdf_Font* const font) {
     for (int i = font->num_chars; i != 0; i--) {
-        free((void*)font->chars[i].bits);
+        AL_BDF_FREE((void*)font->chars[i].bits);
     }
 
-    free((void*)font->chars);
+    AL_BDF_FREE((void*)font->chars);
 }
 
 static al_bdf_Char const* al_bdf_find_char(al_bdf_Font* const font, int code) {
