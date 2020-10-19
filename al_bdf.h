@@ -124,10 +124,48 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font,
                                  al_bdf_Filter const filter,
                                  void* const userdata);
 
+/**
+ * Unloads a font from memory.
+ * 
+ * @param font the BDF font
+ *
+ * @see al_bdf_load
+ * @see al_bdf_load_filter
+ */
 void al_bdf_unload(al_bdf_Font* const font);
 
+/**
+ * Evaluates the dimensions in pixels of the given text for the given font,
+ * which are stored into width and height. x0 and y0 will have the offsets to
+ * the pixel which is at the start of the baseline of the first character.
+ * 
+ * @param font the BDF font
+ * @param x0 the horizontal coordinate of the baseline for the first character
+ * @param y0 the vertical coordinate of the baseline for the first character
+ * @param width the horizontal size of the text
+ * @param height the vertical size of the text
+ * @param text the string with the text to evaluate the size
+ */
 void al_bdf_size(al_bdf_Font* const font, int* const x0, int* const y0, int* const width, int* const height, char const* text);
 
+/**
+ * Draws the text using the given font. AL_BDF_CANVAS_TYPE must be defined with
+ * the type of the canvas argument, and AL_BDF_COLOR_TYPE with the type of the
+ * color compatible with the canvas. This function will call AL_BDF_PUT_PIXEL
+ * to set each individual pixel to draw the text onto the canvas.
+ * AL_BDF_PUT_PIXELS can be defined instead, and will receive a bit pattern
+ * with eight pixels that can be drawn in one call. Only pixels that are part
+ * of the text are drawn, i.e. the canvas won't be cleared or zeroed as part of
+ * the rendering.
+ * 
+ * AL_BDF_PUT_PIXEL must have the following signature: (AL_BDF_CANVAS_TYPE, int, int, AL_BDF_COLOR_TYPE).
+ * AL_BDF_PUT_PIXELS must have the following signature: (AL_BDF_CANVAS_TYPE, int, int, AL_BDF_COLOR_TYPE, uint8_t).
+ * 
+ * @param font the BDF font
+ * @param text the text to be rendered with the given font
+ * @param canvas the canvas where the text will be rendered to
+ * @param color the color that will be used to render the text
+ */
 void al_bdf_render(al_bdf_Font* const font, char const* text, AL_BDF_CANVAS_TYPE const canvas, AL_BDF_COLOR_TYPE const color);
 
 #endif /* !AL_BDF_H */
