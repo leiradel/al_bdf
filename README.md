@@ -44,26 +44,46 @@ The API is fully documented in the `al_bdf.h` file.
 ## TL;DR
 
 ```cpp
-// Load a BDF font
-FILE* const fp = fopen("b10.bdf", "rb");
+// al_sfxr config and inclusion
+#define AL_BDF_IMPLEMENTATION
+#define AL_BDF_CANVAS_TYPE uint16_t*
+#define AL_BDF_COLOR_TYPE uint16_t
+#define AL_BDF_PUT_PIXEL put_pixel
+#include <al_bdf.h>
 
-if (al_bdf_load(font, fpreader, fp) != AL_BDF_OK) {
-    // error
+static int width;
+
+static void put_pixel(uint16_t* const canvas, int const x, int const y, uint16_t color) {
+    canvas[y * width + x] = color;
 }
 
-// Evaluate the size of the "al_bdf" text
-int x0, y0, width, height;
-al_bdf_size(&font, &x0, &y0, &width, &height, "al_bdf");
+static int fpreader(void* const userdata, void* const buffer, size_t const count) {
+    FILE* const fp = (FILE*)userdata;
+    return fread(buffer, 1, count, fp);
+}
 
-// Allocate a canvas big enough to render the text
-size_t const count = width * height;
-uint16_t* const pixels = (uint16_t*)malloc(count * 2);
+static void render(void) {
+    // Load a BDF font
+    FILE* const fp = fopen("b10.bdf", "rb");
 
-// Clear the canvas, as al_bdf_render only sets pixels
-memset(pixels, 0, count * 2);
+    if (al_bdf_load(font, fpreader, fp) != AL_BDF_OK) {
+        // error
+    }
 
-// Render the text
-al_bdf_render(&font, "al_bdf", pixels, 0xff00);
+    // Evaluate the size of the "al_bdf" text
+    int x0, y0, height;
+    al_bdf_size(&font, &x0, &y0, &width, &height, "al_bdf");
+
+    // Allocate a canvas big enough to render the text
+    size_t const count = width * height;
+    uint16_t* const pixels = (uint16_t*)malloc(count * 2);
+
+    // Clear the canvas, as al_bdf_render only sets pixels
+    memset(pixels, 0, count * 2);
+
+    // Render the text
+    al_bdf_render(&font, "al_bdf", pixels, 0xff00);
+}
 ```
 
 ## License
