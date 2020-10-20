@@ -23,12 +23,10 @@ configuration used in the implementation must be used.
     1. `int x`: The horizontal coordinate of the pixel to render (0 is left)
     1. `int y`: The vertical coordinate of the pixel to render (0 is top)
     1. `AL_BDF_COLOR_TYPE color`: The color to set the pixel
-    1. `size_t pitch`: An arbitrary value passed to `al_bdf_render`, can be
-      used to pass the number of pixels or bytes that makes up an entire
-      horizontal line in the canvas.
 * `AL_BDF_PUT_PIXELS`: A macro to be used instead of `AL_BDF_PUT_PIXEL`. This
   one will receive a bit pattern for eight horizontal pixels to be drawn
-  starting at `x` and `y`. It takes the same parameters, plus `uint8_t pattern` with each bit set corresponding to a pixel that must be rendered, from most
+  starting at `x` and `y`. It takes the same parameters, plus `uint8_t pattern`
+  with each bit set corresponding to a pixel that must be rendered, from most
   significant bit to less significant.
 
 In addition to the mandatory macros, the following macros can be defined to
@@ -228,16 +226,15 @@ void al_bdf_size(al_bdf_Font* const font, int* const x0, int* const y0, int* con
  * of the text are drawn, i.e. the canvas won't be cleared or zeroed as part of
  * the rendering.
  * 
+ * AL_BDF_PUT_PIXEL must have the following signature: (AL_BDF_CANVAS_TYPE, int, int, AL_BDF_COLOR_TYPE).
+ * AL_BDF_PUT_PIXELS must have the following signature: (AL_BDF_CANVAS_TYPE, int, int, AL_BDF_COLOR_TYPE, uint8_t).
+ * 
  * @param font the BDF font
  * @param text the text to be rendered with the given font
  * @param canvas the canvas where the text will be rendered to
  * @param color the color that will be used to render the text
  */
-void al_bdf_render(al_bdf_Font* const font,
-                   char const* text,
-                   AL_BDF_CANVAS_TYPE const canvas,
-                   AL_BDF_COLOR_TYPE const color,
-                   size_t const pitch);
+void al_bdf_render(al_bdf_Font* const font, char const* text, AL_BDF_CANVAS_TYPE const canvas, AL_BDF_COLOR_TYPE const color);
 
 #endif /* !AL_BDF_H */
 
@@ -976,8 +973,7 @@ static void al_bdf_draw_char(const al_bdf_Char* const chr,
                              AL_BDF_CANVAS_TYPE const canvas,
                              int const x0,
                              int y0,
-                             AL_BDF_COLOR_TYPE const color,
-                             size_t const pitch) {
+                             AL_BDF_COLOR_TYPE const color) {
 
     uint8_t const* bits = chr->bits;
     uint8_t const* const endfont = bits + chr->wbytes * chr->bbh;
@@ -989,26 +985,22 @@ static void al_bdf_draw_char(const al_bdf_Char* const chr,
             uint8_t const byte = *bits;
 
 #if defined(AL_BDF_PUT_PIXELS)
-            AL_BDF_PUT_PIXELS(canvas, x, y0, color, pitch, byte);
+            AL_BDF_PUT_PIXELS(canvas, x, y0, color, byte);
 #else
-            if (byte & 0x80) AL_BDF_PUT_PIXEL(canvas, x + 0, y0, color, pitch);
-            if (byte & 0x40) AL_BDF_PUT_PIXEL(canvas, x + 1, y0, color, pitch);
-            if (byte & 0x20) AL_BDF_PUT_PIXEL(canvas, x + 2, y0, color, pitch);
-            if (byte & 0x10) AL_BDF_PUT_PIXEL(canvas, x + 3, y0, color, pitch);
-            if (byte & 0x08) AL_BDF_PUT_PIXEL(canvas, x + 4, y0, color, pitch);
-            if (byte & 0x04) AL_BDF_PUT_PIXEL(canvas, x + 5, y0, color, pitch);
-            if (byte & 0x02) AL_BDF_PUT_PIXEL(canvas, x + 6, y0, color, pitch);
-            if (byte & 0x01) AL_BDF_PUT_PIXEL(canvas, x + 7, y0, color, pitch);
+            if (byte & 0x80) AL_BDF_PUT_PIXEL(canvas, x + 0, y0, color);
+            if (byte & 0x40) AL_BDF_PUT_PIXEL(canvas, x + 1, y0, color);
+            if (byte & 0x20) AL_BDF_PUT_PIXEL(canvas, x + 2, y0, color);
+            if (byte & 0x10) AL_BDF_PUT_PIXEL(canvas, x + 3, y0, color);
+            if (byte & 0x08) AL_BDF_PUT_PIXEL(canvas, x + 4, y0, color);
+            if (byte & 0x04) AL_BDF_PUT_PIXEL(canvas, x + 5, y0, color);
+            if (byte & 0x02) AL_BDF_PUT_PIXEL(canvas, x + 6, y0, color);
+            if (byte & 0x01) AL_BDF_PUT_PIXEL(canvas, x + 7, y0, color);
 #endif
         }
     }
 }
 
-void al_bdf_render(al_bdf_Font* const font,
-                   char const* text,
-                   AL_BDF_CANVAS_TYPE const canvas,
-                   AL_BDF_COLOR_TYPE const color,
-                   size_t const pitch) {
+void al_bdf_render(al_bdf_Font* const font, char const* text, AL_BDF_CANVAS_TYPE const canvas, AL_BDF_COLOR_TYPE const color) {
 
     int x = 0, y = font->baseline;
 
@@ -1025,7 +1017,7 @@ void al_bdf_render(al_bdf_Font* const font,
             int const dx = x + chr->bbxoff0x;
             int const dy = y - (chr->bbyoff0y + chr->bbh);
 
-            al_bdf_draw_char(chr, canvas, dx, dy, color, pitch);
+            al_bdf_draw_char(chr, canvas, dx, dy, color);
 
             x += chr->dwx0;
             y += chr->dwy0;
