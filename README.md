@@ -24,7 +24,8 @@ configuration used in the implementation must be used.
     1. `AL_BDF_COLOR_TYPE color`: The color to set the pixel
 * `AL_BDF_PUT_PIXELS`: A macro to be used instead of `AL_BDF_PUT_PIXEL`. This
   one will receive a bit pattern for eight horizontal pixels to be drawn
-  starting at `x` and `y`. It takes the same parameters, plus `uint8_t pattern` with each bit set corresponding to a pixel that must be rendered, from most
+  starting at `x` and `y`. It takes the same parameters, plus `uint8_t pattern`
+  with each bit set corresponding to a pixel that must be rendered, from most
   significant bit to less significant.
 
 In addition to the mandatory macros, the following macros can be defined to
@@ -46,7 +47,7 @@ The API is fully documented in the `al_bdf.h` file.
 // Load a BDF font
 FILE* const fp = fopen("b10.bdf", "rb");
 
-if (al_bdf_load(font, fpreader, fp) != 0) {
+if (al_bdf_load(font, fpreader, fp) != AL_BDF_OK) {
     // error
 }
 

@@ -48,7 +48,7 @@ The API is fully documented in the `al_bdf.h` file.
 // Load a BDF font
 FILE* const fp = fopen("b10.bdf", "rb");
 
-if (al_bdf_load(font, fpreader, fp) != 0) {
+if (al_bdf_load(font, fpreader, fp) != AL_BDF_OK) {
     // error
 }
 
