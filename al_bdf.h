@@ -656,9 +656,9 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
     int bbw = 0, bbh = 0;
     int bbxoff0x = 0, bbyoff0y = 0;
 
-    al_bdf_Char* current_char = NULL;
+    al_bdf_Char current_char = {0};
+    int in_char = 0;
     int should_add = 0;
-    int character_bbh;
 
     al_bdf_Char* chars = NULL;
     int num_chars = 0;
@@ -718,11 +718,9 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                 int const dwx0_tmp = al_bdf_read_int(&ctx);
                 int const dwy0_tmp = al_bdf_read_int(&ctx);
 
-                if (current_char != NULL) {
-                    if (should_add) {
-                        current_char->dwx0 = dwx0_tmp;
-                        current_char->dwy0 = dwy0_tmp;
-                    }
+                if (in_char) {
+                    current_char.dwx0 = dwx0_tmp;
+                    current_char.dwy0 = dwy0_tmp;
                 }
                 else {
                     dwx0 = dwx0_tmp;
@@ -746,7 +744,7 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
 
             case AL_BDF_STARTCHAR: {
                 /* If chr is not NULL the last character was not properly ended. */
-                if (current_char != NULL) {
+                if (in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_ENDED);
                 }
 
@@ -755,25 +753,25 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                     longjmp(ctx.on_error, AL_BDF_TOO_MANY_CHARACTERS);
                 }
 
-                current_char = chars + num_chars;
+                in_char = 1;
 
                 /* Copy default values. */
-                current_char->code = -1;
-                current_char->dwx0 = dwx0;
-                current_char->dwy0 = dwy0;
+                current_char.code = -1;
+                current_char.dwx0 = dwx0;
+                current_char.dwy0 = dwy0;
                 /*chr->dwx1 = dwx1;*/
                 /*chr->dwy1 = dwy1;*/
-                current_char->bbw = bbw;
-                current_char->bbh = bbh;
-                current_char->bbxoff0x = bbxoff0x;
-                current_char->bbyoff0y = bbyoff0y;
+                current_char.bbw = bbw;
+                current_char.bbh = bbh;
+                current_char.bbxoff0x = bbxoff0x;
+                current_char.bbyoff0y = bbyoff0y;
 
                 break;
             }
 
             case AL_BDF_ENCODING: {
                 /* If chr is NULL the character was not properly started. */
-                if (current_char == NULL) {
+                if (!in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_STARTED);
                 }
 
@@ -787,8 +785,7 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                 int const final = filter(userdata, adobe, non_standard);
 
                 if (final != -1) {
-                    current_char->code = final;
-                    num_chars++;
+                    current_char.code = final;
                     should_add = 1;
                 }
                 else {
@@ -801,24 +798,14 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
             /* The bounding box around the character's black pixels. */
             case AL_BDF_BBX: {
                 /* If chr is NULL the character was not properly started. */
-                if (current_char == NULL) {
+                if (!in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_STARTED);
                 }
 
-                /* Only process the character if it was not filtered out. */
-                if (should_add) {
-                    current_char->bbw = al_bdf_read_int(&ctx);
-                    current_char->bbh = al_bdf_read_int(&ctx);
-                    current_char->bbxoff0x = al_bdf_read_int(&ctx);
-                    current_char->bbyoff0y = al_bdf_read_int(&ctx);
-                }
-                else {
-                    /* Save the character's bbh so we can skip the BITMAP section later. */
-                    character_bbh = al_bdf_read_int(&ctx);
-                    al_bdf_read_int(&ctx);
-                    al_bdf_read_int(&ctx);
-                    al_bdf_read_int(&ctx);
-                }
+                current_char.bbw = al_bdf_read_int(&ctx);
+                current_char.bbh = al_bdf_read_int(&ctx);
+                current_char.bbxoff0x = al_bdf_read_int(&ctx);
+                current_char.bbyoff0y = al_bdf_read_int(&ctx);
 
                 break;
             }
@@ -826,36 +813,38 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
             /* BITMAP signals the start of the hex data. */
             case AL_BDF_BITMAP: {
                 /* If chr is NULL the character was not properly started. */
-                if (current_char == NULL) {
+                if (!in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_STARTED);
                 }
 
                 /* Only process the character if it was not filtered out. */
                 if (should_add) {
                     /* wbytes is the width of the char in bytes. */
-                    current_char->wbytes = (current_char->bbw + 7) / 8;
+                    current_char.wbytes = (current_char.bbw + 7) / 8;
 
                     /* Malloc the memory for the pixels. */
-                    uint8_t* bits = (uint8_t*)AL_BDF_MALLOC(current_char->wbytes * current_char->bbh);
-                    current_char->bits = bits;
+                    uint8_t* bits = (uint8_t*)AL_BDF_MALLOC(current_char.wbytes * current_char.bbh);
+                    current_char.bits = bits;
 
                     if (bits == NULL) {
                         longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
                     }
 
                     /* Read all pixels from file. */
-                    for (int i = current_char->bbh; i != 0; i--) {
+                    for (int i = current_char.bbh; i != 0; i--) {
                         al_bdf_next_line(&ctx);
 
-                        for (int j = current_char->wbytes; j != 0; j--) {
+                        for (int j = current_char.wbytes; j != 0; j--) {
                             uint8_t const byte = al_bdf_read_hex2(&ctx);
                             *bits++ = byte;
                         }
                     }
+
+                    chars[num_chars++] = current_char;
                 }
                 else {
                     /* Skip the bitmap. */
-                    for (int i = character_bbh; i != 0; i--) {
+                    for (int i = current_char.bbh; i != 0; i--) {
                         al_bdf_next_line(&ctx);
                     }
                 }
@@ -865,17 +854,17 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
 
             case AL_BDF_ENDCHAR: {
                 /* If chr is NULL the character was not properly started. */
-                if (current_char == NULL) {
+                if (!in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_STARTED);
                 }
 
-                current_char = NULL;
+                in_char = 0;
                 break;
             }
 
             case AL_BDF_ENDFONT: {
                 /* If chr is not NULL the last character was not properly ended. */
-                if (current_char != NULL) {
+                if (in_char) {
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_ENDED);
                 }
 
