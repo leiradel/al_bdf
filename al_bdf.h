@@ -122,13 +122,14 @@ typedef struct {
     int dwx0, dwy0;
     int bbw, bbh, bbxoff0x, bbyoff0y, wbytes;
 
-    uint8_t const* bits;
+    size_t bits;
 }
 al_bdf_Char;
 
 typedef struct {
     int num_chars, height, baseline;
     al_bdf_Char const* chars;
+    uint8_t const* bits;
 }
 al_bdf_Font;
 
@@ -286,6 +287,67 @@ We limit a line at MAXLEN characters at most. If a line is greater than MAXLEN,
 it's likely that the font is too big for use with this engine anyway.
 */
 #define AL_BDF_MAXLEN 1024
+
+/* Dynamic vector helpers. */
+typedef struct {
+    void* elements;
+    size_t element_size;
+    size_t num_elements;
+    size_t allocated_elements;
+}
+al_bdf_Vector;
+
+static void al_bdf_vector_init(al_bdf_Vector* const vector, size_t const element_size) {
+    vector->elements = NULL;
+    vector->element_size = element_size;
+    vector->num_elements = 0;
+    vector->allocated_elements = 0;
+}
+
+static void al_bdf_vector_destroy(al_bdf_Vector* const vector) {
+    AL_BDF_FREE(vector->elements);
+    al_bdf_vector_init(vector, vector->element_size);
+}
+
+static void* al_bdf_vector_reserve(al_bdf_Vector* const vector, size_t const required_elements) {
+    size_t const unused_elements = vector->allocated_elements - vector->num_elements;
+
+    if (required_elements <= unused_elements) {
+        size_t const old_num_elements = vector->num_elements;
+        vector->num_elements += required_elements;
+        return (uint8_t*)vector->elements + old_num_elements * vector->element_size;
+    }
+
+    size_t new_allocated = vector->allocated_elements != 0 ? vector->allocated_elements * 2 : 16;
+
+    while (required_elements > new_allocated - vector->num_elements) {
+        new_allocated *= 2;
+    }
+
+    void* const new_elements = AL_BDF_REALLOC(vector->elements, new_allocated * vector->element_size);
+
+    if (new_elements == NULL) {
+        return NULL;
+    }
+
+    vector->elements = new_elements;
+    vector->allocated_elements = new_allocated;
+    size_t const old_num_elements = vector->num_elements;
+    vector->num_elements += required_elements;
+    return (uint8_t*)vector->elements + old_num_elements * vector->element_size;
+}
+
+static int al_bdf_vector_fit(al_bdf_Vector* const vector) {
+    void* new_elements = AL_BDF_REALLOC(vector->elements, vector->num_elements * vector->element_size);
+
+    if (new_elements == NULL) {
+        return 0;
+    }
+
+    vector->elements = new_elements;
+    vector->allocated_elements = vector->num_elements;
+    return 1;
+}
 
 typedef struct {
     char line[AL_BDF_MAXLEN];
@@ -636,7 +698,10 @@ al_bdf_Result al_bdf_load(al_bdf_Font* const font, al_bdf_Read const reader, voi
     return al_bdf_load_filter(font, reader, al_bdf_pass_all, userdata);
 }
 
-al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const reader, al_bdf_Filter const filter, void* const userdata) {
+al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font,
+                                 al_bdf_Read const reader,
+                                 al_bdf_Filter const filter,
+                                 void* const userdata) {
     font->chars = NULL;
     font->num_chars = 0;
 
@@ -645,13 +710,6 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
     ctx.read = reader;
     ctx.userdata = userdata;
 
-    int volatile error = 0;
-
-    if ((error = setjmp(ctx.on_error)) != 0) {
-        al_bdf_unload(font);
-        return (al_bdf_Result)error;
-    }
-
     int dwx0 = 0, dwy0 = 0;
     int bbw = 0, bbh = 0;
     int bbxoff0x = 0, bbyoff0y = 0;
@@ -659,9 +717,22 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
     al_bdf_Char current_char = {0};
     int in_char = 0;
     int should_add = 0;
-
-    al_bdf_Char* chars = NULL;
     int num_chars = 0;
+
+    al_bdf_Vector chars;
+    al_bdf_vector_init(&chars, sizeof(al_bdf_Char));
+
+    al_bdf_Vector bits;
+    al_bdf_vector_init(&bits, sizeof(uint8_t));
+
+    int volatile error = 0;
+
+    if ((error = setjmp(ctx.on_error)) != 0) {
+        al_bdf_vector_destroy(&bits);
+        al_bdf_vector_destroy(&chars);
+        al_bdf_unload(font);
+        return (al_bdf_Result)error;
+    }
 
     for (;;) {
         al_bdf_next_line(&ctx);
@@ -731,14 +802,8 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
             }
 
             case AL_BDF_CHARS: {
-                /* Read the number of chars in this font and allocate the required memory. */
+                /* Read the number of chars in this font. */
                 font->num_chars = al_bdf_read_int(&ctx);
-                font->chars = chars = (al_bdf_Char*)AL_BDF_MALLOC(font->num_chars * sizeof(al_bdf_Char));
-
-                if (chars == NULL) {
-                    longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
-                }
-
                 break;
             }
 
@@ -823,10 +888,10 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                     current_char.wbytes = (current_char.bbw + 7) / 8;
 
                     /* Malloc the memory for the pixels. */
-                    uint8_t* bits = (uint8_t*)AL_BDF_MALLOC(current_char.wbytes * current_char.bbh);
-                    current_char.bits = bits;
+                    current_char.bits = bits.num_elements * bits.element_size;
+                    uint8_t* pixels = al_bdf_vector_reserve(&bits, current_char.wbytes * current_char.bbh);
 
-                    if (bits == NULL) {
+                    if (pixels == NULL) {
                         longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
                     }
 
@@ -836,11 +901,18 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
 
                         for (int j = current_char.wbytes; j != 0; j--) {
                             uint8_t const byte = al_bdf_read_hex2(&ctx);
-                            *bits++ = byte;
+                            *pixels++ = byte;
                         }
                     }
 
-                    chars[num_chars++] = current_char;
+                    al_bdf_Char* const chr = al_bdf_vector_reserve(&chars, 1);
+
+                    if (chr == NULL) {
+                        longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
+                    }
+
+                    *chr = current_char;
+                    num_chars++;
                 }
                 else {
                     /* Skip the bitmap. */
@@ -868,17 +940,17 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font, al_bdf_Read const read
                     longjmp(ctx.on_error, AL_BDF_CHARACTER_NOT_ENDED);
                 }
 
-                if (num_chars < font->num_chars) {
-                    font->num_chars = num_chars;
-                    al_bdf_Char* const new_chars = (al_bdf_Char*)AL_BDF_REALLOC(chars, num_chars * sizeof(al_bdf_Char));
-
-                    if (new_chars != NULL) {
-                        font->chars = chars = new_chars;
-                    }
+                /* Adjust the allocated memory to only the necessary. */
+                if (!al_bdf_vector_fit(&chars) || !al_bdf_vector_fit(&bits)) {
+                    longjmp(ctx.on_error, AL_BDF_OUT_OF_MEMORY);
                 }
 
+                font->num_chars = num_chars;
+                font->chars = chars.elements;
+                font->bits = bits.elements;
+
                 /* Sort font by character codes (TODO: should be an hash table). */
-                qsort(chars, num_chars, sizeof(al_bdf_Char), al_bdf_compare);
+                qsort(chars.elements, num_chars, sizeof(al_bdf_Char), al_bdf_compare);
                 return AL_BDF_OK;
             }
         
@@ -978,13 +1050,14 @@ end:
     *y0 += *height;
 }
 
-static void al_bdf_draw_char(const al_bdf_Char* const chr,
+static void al_bdf_draw_char(al_bdf_Font const* const font,
+                             al_bdf_Char const* const chr,
                              AL_BDF_CANVAS_TYPE const canvas,
                              int const x0,
                              int y0,
                              AL_BDF_COLOR_TYPE const color) {
 
-    uint8_t const* bits = chr->bits;
+    uint8_t const* bits = font->bits + chr->bits;
     uint8_t const* const endfont = bits + chr->wbytes * chr->bbh;
 
     for (; bits < endfont; y0++) {
@@ -1026,7 +1099,7 @@ void al_bdf_render(al_bdf_Font* const font, char const* text, AL_BDF_CANVAS_TYPE
             int const dx = x + chr->bbxoff0x;
             int const dy = y - (chr->bbyoff0y + chr->bbh);
 
-            al_bdf_draw_char(chr, canvas, dx, dy, color);
+            al_bdf_draw_char(font, chr, canvas, dx, dy, color);
 
             x += chr->dwx0;
             y += chr->dwy0;
