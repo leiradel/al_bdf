@@ -1,7 +1,7 @@
 # al_bdf
 
 **al_bdf** is a header-only library that renders text using
-[Adobe BDF Fonts](https://wwwimages2.adobe.com/content/dam/acom/en/devnet/font/pdfs/5005.BDF_Spec.pdf).
+[Adobe BDF Fonts](https://adobe-type-tools.github.io/font-tech-notes/pdfs/5005.BDF_Spec.pdf).
 
 ## Instructions
 
