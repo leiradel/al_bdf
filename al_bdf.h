@@ -590,9 +590,18 @@ static void al_bdf_next_line(al_bdf_Context* const ctx) {
     ctx->str = ctx->line;
 }
 
-/* Parse an integer, updating the pointer. */
-static int al_bdf_read_int(al_bdf_Context* ctx) {
+/* Parse an optional integer, updating the pointer. Sets found accordingly. */
+static int al_bdf_optional_int(al_bdf_Context* ctx, int* found) {
     al_bdf_skip_spaces(ctx);
+    int const has_int = *ctx->str != 0;
+
+    if (found != NULL) {
+        *found = has_int;
+    }
+
+    if (!has_int) {
+        return -1;
+    }
 
     /* Adobe's spec doesn't say numbers can be preceeded by '+' but we never know. */
     int const signal = *ctx->str == '-' ? -1 : 1;
@@ -628,6 +637,18 @@ static int al_bdf_read_int(al_bdf_Context* ctx) {
                 return signal * value;
         }
     }
+}
+
+/* Parse an integer, updating the pointer. */
+static int al_bdf_read_int(al_bdf_Context* ctx) {
+    int found = 0;
+    int const value = al_bdf_optional_int(ctx, &found);
+
+    if (!found) {
+        longjmp(ctx->on_error, AL_BDF_DIGIT_EXPECTED);
+    }
+
+    return value;
 }
 
 static uint8_t al_bdf_read_hex2(al_bdf_Context* const ctx) {
@@ -844,7 +865,7 @@ al_bdf_Result al_bdf_load_filter(al_bdf_Font* const font,
                 int const adobe = al_bdf_read_int(&ctx);
 
                 /* If the encoding is -1, try to read another integer. */
-                int const non_standard = adobe == -1 ? al_bdf_read_int(&ctx) : -1;
+                int const non_standard = adobe == -1 ? al_bdf_optional_int(&ctx, NULL) : -1;
 
                 /* The filter returns the final encoding to use, or -1 if the character shouldn't be added to the font. */
                 int const final = filter(userdata, adobe, non_standard);
